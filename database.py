@@ -17,7 +17,7 @@ Base = declarative_base() # tạo base class cho các model ORM, khi định ngh
 # lấy DB session
 def get_db():
     db = SessionLocal() # tạo session mới
-    try
+    try:
         yield db # yield để trả về session và giữ kết nối mở
     finally:
         db.close() # đóng session sau khi sử dụng xong
