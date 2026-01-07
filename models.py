@@ -1,6 +1,6 @@
 # mỗi class ánh xạ 1 bảng trong db
 
-from sqlalchemy import Column, Integer, String, Float, Date, Time, ForeignKey, Time, TIMESTAMP
+from sqlalchemy import Column, Integer, String, Float, Date, Time, ForeignKey, TIMESTAMP, Numeric
 from sqlalchemy.orm import relationship
 from database import Base  
 
