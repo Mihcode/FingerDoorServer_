@@ -27,18 +27,18 @@ def login(user_in: schemas.UserLogin, db: Session = Depends(get_db)):
 
 # Profile nhân viên
 @app.get("/api/profile/{employee_id}", response_model=schemas.ProfileResponse)
-def get_profile(user_id: int, db : Session = Depends(get_db)):
+def get_profile(employee_id: int, db : Session = Depends(get_db)):
     Employee = db.query(models.Employee).filter(models.Employee.id == employee_id).first()
     if not Employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     # chuyển date sang str
-    emp_dict = emp.__dict__
-    emp_dict['dob'] = str(emp.dob)
-    emp_dict['start_date'] = str(emp.start_date)
+    emp_dict = Employee.__dict__.copy()
+    emp_dict['dob'] = str(Employee.dob)
+    emp_dict['start_date'] = str(Employee.start_date)
 
     return {
         "employee": emp_dict,
-        "salary": emp.salary_info
+        "salary": Employee.salary_info
     }
 
 # lịch sử chấm công
