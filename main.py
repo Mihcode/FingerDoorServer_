@@ -73,6 +73,7 @@ def get_history(user_id: int, month: int, year: int, db: Session = Depends(get_d
     # Nếu không tìm thấy user hoặc user này chưa liên kết với nhân viên nào
     if not user or not user.employee_id:
         return [] # Trả về danh sách rỗng
+    emp_id = user.employee_id
 
     records = db.query(models.DailyAttendance).filter(
         models.DailyAttendance.employee_id == emp_id, # Dùng emp_id vừa tìm được
