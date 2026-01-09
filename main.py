@@ -42,5 +42,45 @@ def get_profile(employee_id: int, db : Session = Depends(get_db)):
     }
 
 # lịch sử chấm công
-
+@app.get("/api/history", response_model=list[schemas.AttendanceResponse])
+def get_history(emp_id: int, month: int, year: int, db: Session = Depends(get_db)):
+    
+    records = db.query(models.DailyAttendance).filter(
+        models.DailyAttendance.employee_id == emp_id,
+        extract('month', models.DailyAttendance.work_date) == month,
+        extract('year', models.DailyAttendance.work_date) == year
+    ).order_by(models.DailyAttendance.work_date.desc()).all()
+    
+    # Map sang JSON
+    history_list = []
+    
+    for row in records:
+        # Tạo ID giả cho RecyclerView Android (VD: 20251224) vì row.work_date là kiểu Date, convert sang chuỗi rồi sang Int
+        date_id = int(row.work_date.strftime("%Y%m%d"))
+        
+        # Tính OT (Logic cứng: Sau 17h00 là OT)
+        ot_min = 0
+        if row.check_out:
+            # check_out trong DB là kiểu Time (VD: 18:30:00)
+            out_minutes = row.check_out.hour * 60 + row.check_out.minute
+            standard_end = 17 * 60 # 17:00 = 1020 phút
+            
+            if out_minutes > standard_end:
+                ot_min = out_minutes - standard_end
+        
+        # Tạo object response
+        history_list.append({
+            "id": date_id,
+            "employee_id": emp_id,
+            "work_date": str(row.work_date),
+            "check_in": str(row.check_in) if row.check_in else None,
+            "check_out": str(row.check_out) if row.check_out else None,
+            
+            # total_minutes lấy thẳng từ DB (do lúc check-out sẽ tính và lưu vào đây)
+            "total_minutes": row.session_minutes or 0,
+            
+            "ot_minutes": ot_min
+        })
+        
+    return history_list
     
