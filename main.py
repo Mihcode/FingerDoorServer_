@@ -26,20 +26,42 @@ def login(user_in: schemas.UserLogin, db: Session = Depends(get_db)):
     }
 
 # Profile nhân viên
-@app.get("/api/profile/{employee_id}", response_model=schemas.ProfileResponse)
-def get_profile(employee_id: int, db : Session = Depends(get_db)):
-    Employee = db.query(models.Employee).filter(models.Employee.id == employee_id).first()
-    if not Employee:
-        raise HTTPException(status_code=404, detail="Employee not found")
-    # chuyển date sang str
-    emp_dict = Employee.__dict__.copy()
-    emp_dict['dob'] = str(Employee.dob)
-    emp_dict['start_date'] = str(Employee.start_date)
+@app.get("/api/profile/{user_id}", response_model=schemas.ProfileResponse)
+def get_profile(user_id: int, db: Session = Depends(get_db)):
+    # 1. Tra cứu User trước
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # 2. Lấy Employee từ User đó
+    employee = user.employee
+    if not employee:
+         raise HTTPException(status_code=404, detail="User này chưa liên kết hồ sơ nhân viên")
+
+    # 3. Map dữ liệu 
+    emp_dict = {
+        "id": employee.id,
+        "emp_code": employee.emp_code,
+        "full_name": employee.full_name,
+        "gender": employee.gender,
+        "dob": str(employee.dob),
+        "position": employee.position,
+        "phone_number": employee.phone_number,
+        "email": employee.email,
+        "start_date": str(employee.start_date)
+    }
+
+    salary_dict = {
+        "position": employee.salary_info.position,
+        "monthly_salary": employee.salary_info.monthly_salary,
+        "bonus_salary": employee.salary_info.bonus_salary
+    }
 
     return {
         "employee": emp_dict,
-        "salary": Employee.salary_info
+        "salary": salary_dict
     }
+
 
 # Lịch sử chấm công
 @app.get("/api/history", response_model=list[schemas.AttendanceResponse])
