@@ -35,6 +35,8 @@ class ProfileResponse(BaseModel):
     salary: SalarySchema
 
 class AttendanceResponse(BaseModel):
+    id: int
+    employee_id: int
     work_date: str
     check_in: str
     check_out: Optional[str]
