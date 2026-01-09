@@ -41,12 +41,19 @@ def get_profile(employee_id: int, db : Session = Depends(get_db)):
         "salary": Employee.salary_info
     }
 
-# lịch sử chấm công
+# Lịch sử chấm công
 @app.get("/api/history", response_model=list[schemas.AttendanceResponse])
-def get_history(emp_id: int, month: int, year: int, db: Session = Depends(get_db)):
+def get_history(user_id: int, month: int, year: int, db: Session = Depends(get_db)):
     
+    # TRA CỨU USER ĐỂ LẤY EMP_ID 
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+
+    # Nếu không tìm thấy user hoặc user này chưa liên kết với nhân viên nào
+    if not user or not user.employee_id:
+        return [] # Trả về danh sách rỗng
+
     records = db.query(models.DailyAttendance).filter(
-        models.DailyAttendance.employee_id == emp_id,
+        models.DailyAttendance.employee_id == emp_id, # Dùng emp_id vừa tìm được
         extract('month', models.DailyAttendance.work_date) == month,
         extract('year', models.DailyAttendance.work_date) == year
     ).order_by(models.DailyAttendance.work_date.desc()).all()
@@ -75,10 +82,7 @@ def get_history(emp_id: int, month: int, year: int, db: Session = Depends(get_db
             "work_date": str(row.work_date),
             "check_in": str(row.check_in) if row.check_in else None,
             "check_out": str(row.check_out) if row.check_out else None,
-            
-            # total_minutes lấy thẳng từ DB (do lúc check-out sẽ tính và lưu vào đây)
             "total_minutes": row.session_minutes or 0,
-            
             "ot_minutes": ot_min
         })
         
