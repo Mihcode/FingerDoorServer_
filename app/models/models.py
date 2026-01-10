@@ -2,7 +2,7 @@
 
 from sqlalchemy import Column, Integer, String, Float, Date, Time, ForeignKey, TIMESTAMP, Numeric
 from sqlalchemy.orm import relationship
-from database import Base  
+from app.database import Base  
 
 class Salary(Base):
     __tablename__ = "salary"  
