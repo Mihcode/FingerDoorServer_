@@ -1,6 +1,9 @@
 fastapi
 uvicorn
 sqlalchemy
-psycopg2-binary 
+psycopg2-binary
 pydantic
 python-dotenv
+# --- CÁC THƯ VIỆN BẮT BUỘC PHẢI THÊM ---
+paho-mqtt
+pydantic-settings
