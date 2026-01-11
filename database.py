@@ -1,12 +1,9 @@
 from sqlalchemy import create_engine # engine để kế nối tới db
 from sqlalchemy.ext.declarative import declarative_base # để tạo base class cho các model ORM
 from sqlalchemy.orm import sessionmaker # để tạo session tương tác với db
-import os # để làm việc với biến môi trường
-from dotenv import load_dotenv # để tải biến môi trường từ file .env
+from config import settings
 
-load_dotenv() # tải biến môi trường từ file .env
-DATABASE_URL = os.getenv("DATABASE_URL")
-# Lấy URL kết nối tới database từ biến môi trường
+DATABASE_URL = settings.DATABASE_URL
 
 engine = create_engine(DATABASE_URL) # tạo đối tượng engine giao tiếp db // không trực tiếp query 
 # Tạo facetory SessionLocal để nó sinh ra các session làm việc với DB
