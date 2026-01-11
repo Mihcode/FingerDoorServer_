@@ -1,46 +1,23 @@
-# app/services/fingerprint_service.py
-
-from typing import List, Optional
-
-
-# MOCK DATA (sau thay DB)
-_fingerprints = []
-
+from app.database import SessionLocal # Sửa import cho khớp cấu trúc
+from app.models import models 
 
 class FingerprintService:
-
-    def get_by_device(self, device_id: str) -> List[dict]:
-        return [
-            fp for fp in _fingerprints
-            if fp["device_id"] == device_id and not fp.get("deleted")
-        ]
-
-    def get_by_device_and_finger(
-        self, device_id: str, finger_id: int
-    ) -> Optional[dict]:
-        for fp in _fingerprints:
-            if (
-                fp["device_id"] == device_id
-                and fp["finger_id"] == finger_id
-                and not fp.get("deleted")
-            ):
-                return fp
-        return None
-
     def add(self, device_id: str, employee_id: int, finger_id: int):
-        _fingerprints.append({
-            "id": len(_fingerprints) + 1,
-            "device_id": device_id,
-            "employee_id": employee_id,
-            "finger_id": finger_id,
-            "deleted": False
-        })
-
-    def mark_deleted(self, fp_id: int):
-        for fp in _fingerprints:
-            if fp["id"] == fp_id:
-                fp["deleted"] = True
-                return
-
+        db = SessionLocal()
+        try:
+            existing = db.query(models.Fingerprint).filter(
+                models.Fingerprint.finger_id_on_sensor == finger_id
+            ).first()
+            if existing:
+                existing.employee_id = employee_id
+            else:
+                new_fp = models.Fingerprint(employee_id=employee_id, finger_id_on_sensor=finger_id)
+                db.add(new_fp)
+            db.commit()
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            db.rollback()
+        finally:
+            db.close()
 
 fingerprint_service = FingerprintService()
