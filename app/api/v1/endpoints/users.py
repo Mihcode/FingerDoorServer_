@@ -34,6 +34,7 @@ def get_profile(user_id: int, db: Session = Depends(get_db)):
 	employee = user.employee
 	if not employee:
 		 raise HTTPException(status_code=404, detail="User này chưa liên kết hồ sơ nhân viên")
+	
 	emp_dict = {
 		"id": employee.id,
 		"emp_code": employee.emp_code,

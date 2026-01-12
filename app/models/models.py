@@ -1,6 +1,6 @@
 # mỗi class ánh xạ 1 bảng trong db
 
-from sqlalchemy import Column, Integer, String, Float, Date, Time, ForeignKey, TIMESTAMP, Numeric
+from sqlalchemy import Column, Integer, String, Float, Date, Time, ForeignKey, TIMESTAMP, Numeric, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.database import Base  
 
@@ -44,3 +44,39 @@ class DailyAttendance(Base):
     check_in = Column(Time)
     check_out = Column(Time)
     session_minutes = Column(Integer)
+
+class Fingerprint(Base):
+    __tablename__ = "fingerprints"
+    __table_args__ = (
+        UniqueConstraint("device_id", "finger_id", name="uq_device_finger"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False)
+    device_id = Column(String(50), nullable=False)
+    finger_id = Column(Integer, nullable=False)
+    enrolled_at = Column(TIMESTAMP, server_default="CURRENT_TIMESTAMP")
+    updated_at = Column(TIMESTAMP, server_default="CURRENT_TIMESTAMP")
+
+    employee = relationship("Employee")
+
+class DeviceLog(Base):
+    __tablename__ = "device_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=True)
+
+    device_id = Column(String(50))          # nếu có nhiều thiết bị
+    finger_id = Column(Integer)
+
+    timestamp = Column(TIMESTAMP, nullable=False)
+    event_type = Column(String(20))          # match, enroll, delete, error...
+    success = Column(Integer)                # 1 = true, 0 = false (hoặc Boolean nếu DB support)
+    message = Column(String(255))
+
+    created_at = Column(
+        TIMESTAMP,
+        server_default="CURRENT_TIMESTAMP"
+    )
+
+    employee = relationship("Employee")
