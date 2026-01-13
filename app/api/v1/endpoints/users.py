@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import extract
 from app.database import get_db
 import app.models.models as models, app.schema.schemas as schemas
+from datetime import datetime
 
 router = APIRouter()
 
@@ -95,7 +96,7 @@ def delete_employee(emp_code: str, db: Session = Depends(get_db)):
     employee = db.query(models.Employee).filter(models.Employee.emp_code == emp_code).first()
     if not employee:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy nhân viên có mã {emp_code}")
-    emp_id = employee.emp_code
+    emp_id = employee.id
 
     try:
         # 2. Xóa Tài khoản User 
@@ -104,7 +105,7 @@ def delete_employee(emp_code: str, db: Session = Depends(get_db)):
         # 3. Xóa Vân tay (Fingerprints)
         db.query(models.Fingerprint).filter(models.Fingerprint.employee_id == emp_id).delete()
 
-        # 4. Xóa Lịch sử chấm công (DailyAttendance)
+        # 4. Xóa Lịch sử chấm công (DailyAttendance) // Hưng bảo trả lương rồi mới xóa?
         db.query(models.DailyAttendance).filter(models.DailyAttendance.employee_id == emp_id).delete()
 
         # 5. Xóa Log thiết bị (DeviceLog)
@@ -125,16 +126,9 @@ def delete_employee(emp_code: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Lỗi khi xóa dữ liệu: {str(e)}")
 
 
-# =======================================================
-# 2. API CẬP NHẬT THÔNG TIN NHÂN VIÊN
-# =======================================================
-from datetime import datetime # Nhớ import datetime để convert ngày tháng
-
+# API CẬP NHẬT THÔNG TIN NHÂN VIÊN
 @router.put("/employees/{emp_code}")
 def update_employee(emp_code: str, emp_in: schemas.EmployeeUpdate, db: Session = Depends(get_db)):
-    """
-    Nhận emp_code và thông tin mới -> Cập nhật vào DB
-    """
     # 1. Tìm nhân viên cần sửa
     employee = db.query(models.Employee).filter(models.Employee.emp_code == emp_code).first()
     
@@ -142,7 +136,7 @@ def update_employee(emp_code: str, emp_in: schemas.EmployeeUpdate, db: Session =
         raise HTTPException(status_code=404, detail=f"Không tìm thấy nhân viên có mã {emp_code}")
 
     try:
-        # 2. Cập nhật từng trường
+        #  Cập nhật từng trường
         employee.full_name = emp_in.full_name
         employee.gender = emp_in.gender
         employee.position = emp_in.position
@@ -153,8 +147,6 @@ def update_employee(emp_code: str, emp_in: schemas.EmployeeUpdate, db: Session =
         # Giả sử Web gửi "2003-01-01"
         if emp_in.dob:
             employee.dob = datetime.strptime(emp_in.dob, "%Y-%m-%d").date()
-        if emp_in.start_date:
-            employee.start_date = datetime.strptime(emp_in.start_date, "%Y-%m-%d").date()
         
         # Lưu vào DB
         db.commit()
