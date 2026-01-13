@@ -9,10 +9,7 @@ from app.services.device_log_service import device_log_service
 from app.services.device_service import device_service
 from app.services.enroll_context import enroll_context
 
-router = APIRouter(
-    prefix="/devices",
-    tags=["Devices"]
-)
+router = APIRouter()
 
 class EnrollFingerprintReq(BaseModel):
     employee_id: int
