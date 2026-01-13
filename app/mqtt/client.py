@@ -63,19 +63,14 @@ class MQTTClient:
 
     @staticmethod
     def parse_topic(topic: str):
-        """
-        Format: {base_topic}/{device_id}/{category}
-        """
         parts = topic.split("/")
-        # Tùy chỉnh index dựa trên config thực tế của bạn
-        # Ví dụ: "biometric/dev01/fingerprint" -> parts[1]=dev01, parts[2]=fingerprint
-        if len(parts) < 3: 
-             # Fallback hoặc raise error tùy cấu trúc topic
-             # Giả sử topic là: app/device_id/category
-             return parts[1], parts[2]
-        
-        # Nếu cấu trúc là topic/v1/device_id/category thì điều chỉnh index tương ứng
+
+        # Expect: base/device_id/category
+        if len(parts) < 3:
+            raise ValueError(f"Invalid topic format: {topic}")
+
         return parts[-2], parts[-1]
+
 
     @staticmethod
     def parse_payload(payload: bytes):
