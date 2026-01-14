@@ -52,3 +52,16 @@ class EmployeeUpdate(BaseModel):
     phone_number: str
     email: str
     
+class SalaryStatsResponse(BaseModel):
+    emp_code: str
+    full_name: str
+    month: int
+    year: int
+    # Các con số thống kê
+    valid_work_days: float    # Số ngày công hợp lệ
+    ot_days: float            # Số ngày có OT
+    # Tiền
+    monthly_salary: float     # Lương cứng
+    ot_salary_per_day: float  # Lương OT/ngày
+    total_income: float       # Tổng thu nhập tính đến hiện tại
+    
