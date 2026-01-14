@@ -4,7 +4,7 @@ from email.mime.multipart import MIMEMultipart
 from app.core.config import settings
 
 # Cấu hình Email (Lấy từ biến môi trường, AN TOÀN TUYỆT ĐỐI)
-SMTP_SERVER = "FingerDoorServer.gmail.com"
+SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 SENDER_EMAIL = settings.SMTP_EMAIL       # <--- Dùng biến
 SENDER_PASSWORD = settings.SMTP_PASSWORD # <--- Dùng biến
