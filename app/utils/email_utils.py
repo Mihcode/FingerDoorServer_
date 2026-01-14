@@ -5,7 +5,7 @@ from email.mime.multipart import MIMEMultipart
 from app.core.config import settings
 
 SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 465  
+SMTP_PORT = 587  
 SENDER_EMAIL = settings.SMTP_EMAIL
 SENDER_PASSWORD = settings.SMTP_PASSWORD
 
@@ -52,7 +52,18 @@ def send_account_email(to_email: str, full_name: str, username: str, temp_passwo
         msg.attach(MIMEText(body, 'html'))
 
         # Kết nối bằng SSL
-        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT) 
+        # Bật debug để xem log bắt tay (nếu cần)
+        server.set_debuglevel(1) 
+        
+        # 3. Gửi lệnh EHLO đầu tiên
+        server.ehlo()
+        
+        # 4. Nâng cấp lên đường truyền bảo mật
+        server.starttls()
+        
+        # 5. Chào lại sau khi mã hóa
+        server.ehlo()
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
         server.quit()
