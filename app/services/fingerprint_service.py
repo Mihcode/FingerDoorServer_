@@ -1,90 +1,91 @@
 # app/services/fingerprint_service.py
-from typing import List, Optional
+
+from typing import Optional
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
-from app.models.models import Fingerprint
+from app.models.models import Fingerprint, Employee
+
 
 class FingerprintService:
-    def get_db(self):
+
+    def get_db(self) -> Session:
         return SessionLocal()
 
-    def get_by_device(self, device_id: str) -> List[Fingerprint]:
-        """Lấy danh sách vân tay của 1 thiết bị từ DB"""
-        with self.get_db() as session:
-            return session.query(Fingerprint).filter(
-                Fingerprint.device_id == device_id
-            ).all()
+    def get_by_device(
+        self,
+        device_id: str,
+        employee_id: int | None = None
+    ):
+        with self.get_db() as db:
+            query = (
+                db.query(Fingerprint, Employee.emp_code)
+                .join(Employee, Fingerprint.employee_id == Employee.id)
+                .filter(Fingerprint.device_id == device_id)
+            )
 
-    def get_by_device_and_finger(self, device_id: str, finger_id: int) -> Optional[Fingerprint]:
-        """Tìm vân tay cụ thể để xử lý logic (VD: trước khi xóa)"""
-        with self.get_db() as session:
-            return session.query(Fingerprint).filter(
+            if employee_id is not None:
+                query = query.filter(Fingerprint.employee_id == employee_id)
+
+            results = query.all()
+
+            return [
+                {
+                    "id": fp.id,               # <--- THÊM DÒNG NÀY (Primary Key của bảng fingerprints)
+                    "finger_id": fp.finger_id,
+                    "device_id": fp.device_id,
+                    "employee_id": fp.employee_id,
+                    "emp_code": emp_code,
+                    "enrolled_at": fp.enrolled_at
+                }
+                for fp, emp_code in results
+            ]
+
+    def get_by_device_and_finger(
+        self,
+        device_id: str,
+        finger_id: int
+    ) -> Optional[Fingerprint]:
+        with self.get_db() as db:
+            return db.query(Fingerprint).filter(
                 Fingerprint.device_id == device_id,
                 Fingerprint.finger_id == finger_id
             ).first()
 
     def add(self, device_id: str, employee_id: int, finger_id: int):
-        """Lưu vân tay mới vào DB"""
-        with self.get_db() as session:
+        with self.get_db() as db:
             new_fp = Fingerprint(
                 device_id=device_id,
                 employee_id=employee_id,
                 finger_id=finger_id
             )
-            session.add(new_fp)
-            session.commit()
-            session.refresh(new_fp)
+            db.add(new_fp)
+            db.commit()
+            db.refresh(new_fp)
             return new_fp
 
     def mark_deleted(self, fp_id: int):
-        """
-        Xóa hẳn khỏi DB (Hard Delete).
-        Cần xóa hẳn vì trong models.py có UniqueConstraint(device_id, finger_id).
-        Nếu chỉ đánh dấu flag, DB sẽ báo lỗi Duplicate khi đăng ký lại ID này.
-        """
-        with self.get_db() as session:
-            fp = session.query(Fingerprint).filter(Fingerprint.id == fp_id).first()
+        with self.get_db() as db:
+            fp = db.query(Fingerprint).filter(Fingerprint.id == fp_id).first()
             if fp:
-                session.delete(fp)
-                session.commit()
+                db.delete(fp)
+                db.commit()
 
     def get_next_available_id(self, device_id: str) -> Optional[int]:
-        """
-        Tìm số nguyên nhỏ nhất trong khoảng [0, 127] chưa được sử dụng
-        cho thiết bị này để gán tự động.
-        """
-        MAX_FINGERS = 128  # Giới hạn bộ nhớ của module vân tay (thường là 127 hoặc vài trăm)
-        
-        with self.get_db() as session:
-            # Lấy danh sách các ID đang tồn tại trong DB của device đó
-            # Trả về list of tuples: [(0,), (1,), (5,)...]
-            used_ids_query = session.query(Fingerprint.finger_id)\
-                .filter(Fingerprint.device_id == device_id)\
-                .all()
-            
-            # Convert sang set để tra cứu cho nhanh: {0, 1, 5}
-            used_ids = {row[0] for row in used_ids_query}
+        MAX_FINGERS = 128
 
-            # Quét từ 0 -> Max, số nào chưa có trong set thì lấy ngay
+        with self.get_db() as db:
+            used_ids = {
+                row[0]
+                for row in db.query(Fingerprint.finger_id)
+                .filter(Fingerprint.device_id == device_id)
+                .all()
+            }
+
             for candidate in range(MAX_FINGERS):
                 if candidate not in used_ids:
                     return candidate
-            
-            # Nếu loop hết mà không return -> Full bộ nhớ
+
             return None
-    def get_by_device(self, device_id: str, employee_id: int = None):
-        db = SessionLocal()
-        try:
-            # 1. Tạo câu query cơ bản lấy theo device_id
-            query = db.query(Fingerprint).filter(Fingerprint.device_id == device_id)
 
-            # 2. Nếu có employee_id truyền vào thì filter thêm
-            if employee_id is not None:
-                query = query.filter(Fingerprint.employee_id == employee_id)
 
-            # 3. Thực thi và trả về list
-            return query.all()
-        finally:
-            db.close()
-    
 fingerprint_service = FingerprintService()

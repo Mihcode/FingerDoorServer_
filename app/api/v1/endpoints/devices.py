@@ -2,7 +2,6 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from typing import List, Optional
-
 from app.mqtt.client import mqtt_client
 from app.services.fingerprint_service import fingerprint_service
 from app.services.device_log_service import device_log_service
@@ -17,9 +16,13 @@ class EnrollFingerprintReq(BaseModel):
 class FingerprintResp(BaseModel):
     id: int
     employee_id: int
+    emp_code: Optional[str] = None
     device_id: str
     finger_id: int
-    enrolled_at: str
+    enrolled_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
 
 class DeviceLogResp(BaseModel):
     event_type: str
@@ -216,6 +219,7 @@ def list_fingerprints(
     
     # Truyền thêm employee_id vào service
     return fingerprint_service.get_by_device(device_id, employee_id)
+
 @router.get(
     "/{device_id}/logs",
     response_model=List[DeviceLogResp]
