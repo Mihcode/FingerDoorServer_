@@ -94,5 +94,19 @@ class DeviceLogService:
             ).order_by(desc(DeviceLog.created_at)).first()
 
             return log
+    def get_latest_enroll_log(self, device_id: str, finger_id: int):
+        with self.get_db() as db:
+            # Lấy log mới nhất liên quan đến việc enroll của finger_id này
+            # Quan tâm cả 2 loại sự kiện: 'enroll_req' (lúc gửi) và 'enroll_resp' (lúc nhận)
+            return (
+                db.query(DeviceLog)
+                .filter(
+                    DeviceLog.device_id == device_id,
+                    DeviceLog.finger_id == finger_id,
+                    DeviceLog.event_type.in_(["enroll_req", "enroll_resp"])
+                )
+                .order_by(DeviceLog.timestamp.desc()) # Quan trọng: Lấy cái mới nhất
+                .first()
+            )
 # Khởi tạo instance singleton để dùng ở nơi khác
 device_log_service = DeviceLogService()

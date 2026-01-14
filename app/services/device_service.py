@@ -6,7 +6,7 @@ from app.models.models import Device, DoorStateEnum
 
 from datetime import datetime, timedelta
 from app.database import SessionLocal
-from app.models.models import Device, DoorStateEnum
+from app.models.models import Device, DoorStateEnum, DeviceLog
 
 class DeviceService:
     def __init__(self):

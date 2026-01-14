@@ -102,32 +102,59 @@ def enroll_fingerprint(
 @router.get("/{device_id}/fingerprints/{finger_id}/enroll-status")
 def check_enroll_status(device_id: str, finger_id: int):
     """
-    API để Frontend gọi định kỳ (polling) kiểm tra kết quả.
+    Kiểm tra trạng thái dựa trên Log mới nhất:
+    - Nếu log mới nhất là 'enroll_req' -> Đang chờ (Pending)
+    - Nếu log mới nhất là 'enroll_resp' -> Đã có kết quả (Success/Failed)
     """
-    # 1. Tìm log kết quả trong DB
-    log = device_log_service.get_enroll_status(device_id, finger_id)
+    
+    # 1. Lấy log mới nhất của finger_id này
+    log = device_log_service.get_latest_enroll_log(device_id, finger_id)
 
-    # 2. Nếu chưa có log -> Thiết bị chưa gửi phản hồi xong
+    # 2. Trường hợp không tìm thấy log nào (Chưa gọi lệnh enroll bao giờ hoặc ID sai)
     if not log:
         return {
-            "status": "pending",
-            "message": "Waiting for device..."
+            "status": "not_found",
+            "message": "No enrollment request found for this ID"
         }
 
-    # 3. Nếu có log -> Trả về kết quả (dựa vào cột success)
-    # Kiểm tra xem log này có cũ quá không? (Optional: ví dụ log từ hôm qua thì ko tính)
-    # Ở đây giả định quy trình làm liền mạch nên lấy log mới nhất là đúng.
+    # 3. Phân tích trạng thái dựa trên loại sự kiện (event_type)
     
-    if log.success == 1:
+    # === TRƯỜNG HỢP A: ĐANG CHỜ (Pending) ===
+    # Log mới nhất là 'enroll_req' nghĩa là Server đã gửi đi nhưng chưa có 'enroll_resp' đè lên
+    if log.event_type == "enroll_req":
+        
+        # [Mở rộng] Kiểm tra Timeout: Nếu gửi quá 60s mà chưa thấy phản hồi -> Coi là Failed (Timeout)
+        time_diff = datetime.now() - log.timestamp
+        if time_diff.total_seconds() > 60:
+             return {
+                "status": "failed",
+                "message": "Device timeout (No response after 60s)"
+            }
+
         return {
-            "status": "success",
-            "message": "Enrollment completed successfully"
+            "status": "pending",
+            "message": "Command sent to device, waiting for fingerprint..."
         }
-    else:
-        return {
-            "status": "failed",
-            "message": log.message or "Device reported failure"
-        }
+
+    # === TRƯỜNG HỢP B: ĐÃ CÓ KẾT QUẢ (Completed) ===
+    # Log mới nhất là 'enroll_resp'
+    elif log.event_type == "enroll_resp":
+        if log.success == 1: # Hoặc True tuỳ setup DB
+            return {
+                "status": "success",
+                "message": "Enrollment completed successfully"
+            }
+        else:
+            return {
+                "status": "failed",
+                "message": log.message or "Device reported failure"
+            }
+
+    # Trường hợp dự phòng
+    return {
+        "status": "unknown",
+        "message": "Unknown state"
+    }
 # ==========================================
 # 3. Xóa vân tay (Delete)
 # ==========================================
