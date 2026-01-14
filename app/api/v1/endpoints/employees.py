@@ -71,19 +71,23 @@ def preview_payroll(
     last_day = calendar.monthrange(year, month)[1]
     end_date = date(year, month, last_day)
 
+    # ===== NGƯỠNG TĂNG CA (Standard + 2 giờ) =====
+    # 2 giờ = 120 phút
+    ot_threshold_minutes = STANDARD_DAILY_MINUTES + 120
+
     # ===== Query attendance =====
     attendance_subq = (
         db.query(
             DailyAttendance.employee_id.label("employee_id"),
             func.count(DailyAttendance.id).label("working_days"),
             func.sum(DailyAttendance.session_minutes).label("total_minutes"),
+            # [LOGIC MỚI]: Đếm số ngày làm việc > (Chuẩn + 2h)
             func.sum(
                 case(
-                    (DailyAttendance.session_minutes > STANDARD_DAILY_MINUTES,
-                     DailyAttendance.session_minutes - STANDARD_DAILY_MINUTES),
+                    (DailyAttendance.session_minutes > ot_threshold_minutes, 1),
                     else_=0
                 )
-            ).label("overtime_minutes")
+            ).label("overtime_days")
         )
         .filter(
             DailyAttendance.work_date >= start_date,
@@ -101,10 +105,10 @@ def preview_payroll(
             Employee.emp_code,
             Salary.position,
             Salary.monthly_salary,
-            Salary.bonus_salary,   # tiền OT / giờ
+            Salary.bonus_salary,   # Lúc này đóng vai trò là tiền thưởng/ngày OT
             attendance_subq.c.working_days,
             attendance_subq.c.total_minutes,
-            attendance_subq.c.overtime_minutes
+            attendance_subq.c.overtime_days
         )
         .join(attendance_subq, Employee.id == attendance_subq.c.employee_id)
         .join(Salary, Employee.position == Salary.position)
@@ -114,13 +118,19 @@ def preview_payroll(
     result = []
 
     for r in rows:
-        # ===== Tính toán =====
-        base_salary_month = (
-            float(r.monthly_salary) * r.working_days / STANDARD_WORKING_DAYS
-        )
+        # Xử lý giá trị None nếu có
+        working_days = r.working_days or 0
+        overtime_days = r.overtime_days or 0
+        monthly_salary = float(r.monthly_salary or 0)
+        bonus_salary = float(r.bonus_salary or 0)
 
-        overtime_hours = r.overtime_minutes / 60
-        overtime_salary = overtime_hours * float(r.bonus_salary)
+        # 1. Tính lương cơ bản theo ngày công thực tế
+        # Logic: (Lương tháng / Ngày công chuẩn) * Ngày đi làm
+        base_salary_month = (monthly_salary / STANDARD_WORKING_DAYS) * working_days
+
+        # 2. [LOGIC MỚI] Tính lương tăng ca
+        # Logic: Số ngày OT hợp lệ * Tiền thưởng (bonus_salary)
+        overtime_salary = overtime_days * bonus_salary
 
         total_salary = base_salary_month + overtime_salary
 
@@ -130,12 +140,14 @@ def preview_payroll(
             "full_name": r.full_name,
             "position": r.position,
 
-            "working_days": r.working_days,
+            "working_days": working_days,
             "total_work_minutes": r.total_minutes,
-            "overtime_minutes": r.overtime_minutes,
+            
+            # Trả về số ngày OT thay vì số phút OT để frontend dễ hiển thị
+            "overtime_days": overtime_days, 
 
-            "base_salary": float(r.monthly_salary),
-            "overtime_rate_per_hour": float(r.bonus_salary),
+            "base_salary_fix": monthly_salary,
+            "ot_bonus_per_day": bonus_salary,
 
             "base_salary_month": round(base_salary_month, 2),
             "overtime_salary": round(overtime_salary, 2),
