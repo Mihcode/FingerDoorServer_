@@ -57,6 +57,7 @@ class SalaryStatsResponse(BaseModel):
     full_name: str
     month: int
     year: int
+    position: str    
     # Các con số thống kê
     valid_work_days: float    # Số ngày công hợp lệ
     ot_days: float            # Số ngày có OT
