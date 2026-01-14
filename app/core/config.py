@@ -9,7 +9,9 @@ class Settings(BaseSettings):
     MQTT_PASSWORD: str = ""
     DATABASE_URL: str  
     MQTT_BASE_TOPIC: str
-
+    SMTP_EMAIL: str
+    SMTP_PASSWORD: str
+    
     class Config:
         env_file = ".env"
 
