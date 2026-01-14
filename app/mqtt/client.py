@@ -10,6 +10,8 @@ from app.services.enroll_context import enroll_context
 from app.services.fingerprint_service import fingerprint_service
 from app.services.device_log_service import device_log_service  # <--- Sử dụng service này
 from app.services.device_service import device_service
+from app.services.daily_attendance_service import daily_attendance_service 
+from app.services.fingerprint_service import fingerprint_service # Cần để tìm employee_id
 
 logger = logging.getLogger("mqtt")
 logging.basicConfig(level=logging.INFO)
@@ -107,14 +109,27 @@ class MQTTClient:
 
     def handle_fingerprint_event(self, device_id: str, data: dict):
         event = data.get("event")
-        
         device_finger_id = data.get("finger_id") 
-        
         success = data.get("success", True)
-        ts = data.get("ts")
+        ts_str = data.get("ts") 
         
-        # Lấy message (ưu tiên payload cho lỗi, msg cho thông báo thường)
         message = data.get("payload") or data.get("msg", "")
+
+        # [SỬA ĐOẠN NÀY]: Xử lý thời gian "cứng"
+        ts_obj = datetime.now() # Fallback nếu lỗi
+        
+        if ts_str:
+            try:
+                # 1. Cắt bỏ chữ 'Z' để Python không hiểu nhầm là UTC
+                # Input: "2026-01-14T08:09:52Z" -> "2026-01-14T08:09:52"
+                clean_ts = ts_str.replace("Z", "")
+                
+                # 2. Parse chuỗi ISO thuần
+                ts_obj = datetime.fromisoformat(clean_ts)
+                
+                # ts_obj lúc này là: 2026-01-14 08:09:52 (Naive - không múi giờ)
+            except ValueError:
+                ts_obj = datetime.now()
 
         logger.info(
             f"[FP] {device_id} | event={event} | finger_id={device_finger_id}"
@@ -124,18 +139,37 @@ class MQTTClient:
         # CASE 1: Chấm công / Quẹt vân tay (Match)
         # ---------------------------------------------------------
         if event == "fp_match":
-            if success:
-                # TODO: Logic chấm công
-                pass
-            
-            # Ghi log (dùng device_finger_id vì lúc match device luôn gửi ID lên)
+            employee_found = None
+
+            if success and device_finger_id is not None:
+                # Tìm Employee ID
+                fp_record = fingerprint_service.get_by_device_and_finger(
+                    device_id=device_id, 
+                    finger_id=device_finger_id
+                )
+
+                if fp_record:
+                    employee_found = fp_record.employee_id
+                    
+                    # Gọi Service chấm công
+                    # Lưu ý: Truyền ts_obj (đã là giờ VN chuẩn) vào
+                    action = daily_attendance_service.process_attendance(
+                        employee_id=employee_found,
+                        timestamp_vn=ts_obj 
+                    )
+                    logger.info(f"[ATTENDANCE] Emp {employee_found} -> {action}")
+                else:
+                    logger.warning(f"[ATTENDANCE] Unknown finger {device_finger_id} on {device_id}")
+
+            # Ghi log thiết bị
             device_log_service.add(
                 device_id=device_id,
                 event_type="fp_match",
                 finger_id=device_finger_id,
+                employee_id=employee_found,
                 success=success,
                 message=message or ("Finger matched" if success else "Match failed"),
-                timestamp=ts
+                timestamp=ts_obj
             )
 
         # ---------------------------------------------------------
@@ -153,7 +187,7 @@ class MQTTClient:
                     finger_id=device_finger_id, 
                     success=False,
                     message=f"Context missing. Device sent {event} but server wasn't waiting.",
-                    timestamp=ts
+                    timestamp=ts_obj
                 )
                 return
 
@@ -188,7 +222,7 @@ class MQTTClient:
                 employee_id=saved_employee_id,
                 success=log_success,
                 message=msg_log,
-                timestamp=ts
+                timestamp=ts_obj
             )
             
             logger.info(f"[FP][ENROLL] {device_id} success={log_success} msg={msg_log} id={final_finger_id}")
@@ -203,7 +237,7 @@ class MQTTClient:
                 finger_id=device_finger_id,
                 success=success,
                 message=message or "Fingerprint deleted on device",
-                timestamp=ts
+                timestamp=ts_obj
             )
 
         # ---------------------------------------------------------
@@ -216,7 +250,7 @@ class MQTTClient:
                 finger_id=device_finger_id,
                 success=False,
                 message=message,
-                timestamp=ts
+                timestamp=ts_obj
             )
     def handle_status_event(self, device_id: str, data):
         # Topic: base/device_id/status
