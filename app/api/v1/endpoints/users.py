@@ -195,7 +195,7 @@ def get_salary_stats(
         extract('year', models.DailyAttendance.work_date) == year
     ).all()
 
-    # 3. --- XỬ LÝ LOGIC NGHIÊM NGẶT ---
+    # 3. XỬ LÝ LOGIC NGHIÊM NGẶT 
     
     # Cấu hình giờ giấc (Hardcode theo quy định công ty)
     TIME_DEADLINE_IN = time(9, 0, 0)    # 09:00:00
@@ -214,7 +214,7 @@ def get_salary_stats(
         # Lấy thứ trong tuần (0=Thứ 2, ..., 5=Thứ 7, 6=Chủ nhật)
         weekday = row.work_date.weekday()
 
-        # === LOGIC 1: TÍNH NGÀY CÔNG CHUẨN ===
+        # TÍNH NGÀY CÔNG CHUẨN
         # Điều kiện: 
         # 1. Không phải T7, CN (weekday < 5)
         # 2. Check-in <= 09:00
@@ -223,13 +223,13 @@ def get_salary_stats(
             if row.check_in <= TIME_DEADLINE_IN and row.check_out >= TIME_DEADLINE_OUT:
                 valid_work_days += 1
             else:
-                # Log chơi để debug (có thể xóa)
+                # Log debug 
                 print(f"Ngày {row.work_date}: Mất công (Vào {row.check_in}, Ra {row.check_out})")
 
-        # === LOGIC 2: TÍNH OT (Độc lập với ngày công) ===
+        # TÍNH OT (Độc lập với ngày công) 
         # Điều kiện: Check-out >= 19:00
         # (Kể cả T7, CN hay đi muộn, miễn về sau 19h là tính OT)
-        if row.check_out >= TIME_OT_START:
+        if row.check_out >= TIME_OT_START and row.check_in <= TIME_DEADLINE_OUT:
             ot_days += 1
 
     # 4. TÍNH TIỀN
@@ -249,7 +249,7 @@ def get_salary_stats(
         "year": year,
         "valid_work_days": valid_work_days,
         "ot_days": ot_days,
-        "current_daily_salary": round(daily_salary_unit, 2),
+        "month_salary": monthly_salary_base,
         "ot_salary_per_day": ot_salary_unit,
         "total_income": round(total_income, 0) # Làm tròn số tiền
     }
