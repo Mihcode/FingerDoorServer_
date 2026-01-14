@@ -1,5 +1,5 @@
 import smtplib
-import socket # <--- Cần thư viện này để can thiệp mạng
+import socket 
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from app.core.config import settings
@@ -11,18 +11,22 @@ SENDER_PASSWORD = settings.SMTP_PASSWORD
 
 def send_account_email(to_email: str, full_name: str, username: str, temp_password: str):
     # ==============================================================================
-    # 🩹 HACK: ÉP BUỘC DÙNG IPv4 (FIX LỖI ERRNO 101 TRÊN RAILWAY)
+    # 🩹 HACK: ÉP BUỘC DÙNG IPv4 (FIX LỖI ERRNO 101 TRÊN RAILWAY/DOCKER)
     # ==============================================================================
-    # Lưu lại hàm xử lý địa chỉ gốc của hệ thống
     old_getaddrinfo = socket.getaddrinfo
 
-    # Viết hàm mới chỉ lọc lấy địa chỉ IPv4 (AF_INET)
     def new_getaddrinfo(*args, **kwargs):
-        # Ép tham số family thành AF_INET (IPv4)
-        responses = old_getaddrinfo(args[0], args[1], socket.AF_INET, args[3], args[4], args[5])
-        return responses
+        # args[0]: host, args[1]: port
+        # args[2]: family (cái chúng ta muốn thay đổi)
+        # args[3:]: các tham số còn lại (type, proto, flags...)
+        
+        # Lấy các tham số phía sau (nếu có) để truyền lại cho đúng
+        rest_args = args[3:]
+        
+        # Gọi hàm gốc: Giữ nguyên Host, Port, Các tham số đuôi. 
+        # Chỉ thay tham số thứ 3 (family) thành AF_INET (IPv4)
+        return old_getaddrinfo(args[0], args[1], socket.AF_INET, *rest_args)
 
-    # Thay thế hàm gốc bằng hàm mới (Monkey Patch)
     socket.getaddrinfo = new_getaddrinfo
     # ==============================================================================
 
@@ -36,7 +40,7 @@ def send_account_email(to_email: str, full_name: str, username: str, temp_passwo
 
         body = f"""
         <h3>Xin chào {full_name},</h3>
-        <p>Tài khoản nhân viên của bạn đã được tạo thành công.</p>
+        <p>Tài khoản nhân viên của bạn đã được tạo thành công ở chộ đó, chộ đó.</p>
         <p><b>Thông tin đăng nhập:</b></p>
         <ul>
             <li>Username: <b>{username}</b></li>
@@ -62,6 +66,6 @@ def send_account_email(to_email: str, full_name: str, username: str, temp_passwo
     
     finally:
         # ==========================================================================
-        # 🩹 TRẢ LẠI HÀM GỐC (Để không ảnh hưởng các chức năng khác như MQTT)
+        # 🩹 TRẢ LẠI HÀM GỐC (QUAN TRỌNG: Để không làm hỏng các request khác)
         # ==========================================================================
         socket.getaddrinfo = old_getaddrinfo
