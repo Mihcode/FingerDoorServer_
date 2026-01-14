@@ -207,11 +207,15 @@ def open_door(device_id: str):
     "/{device_id}/fingerprints",
     response_model=List[FingerprintResp]
 )
-def list_fingerprints(device_id: str):
+def list_fingerprints(
+    device_id: str, 
+    employee_id: Optional[int] = None  # <--- Thêm tham số này (FastAPI tự hiểu là Query Param)
+):
     if not device_service.exists(device_id):
         raise HTTPException(404, "Device not found")
-    return fingerprint_service.get_by_device(device_id)
-
+    
+    # Truyền thêm employee_id vào service
+    return fingerprint_service.get_by_device(device_id, employee_id)
 @router.get(
     "/{device_id}/logs",
     response_model=List[DeviceLogResp]

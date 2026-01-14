@@ -96,5 +96,6 @@ class DeviceService:
                 "door_state": device.door_state,   
                 "last_seen": device.last_seen
             }
+    
 
 device_service = DeviceService()

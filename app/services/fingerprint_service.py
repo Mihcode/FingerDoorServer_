@@ -72,5 +72,19 @@ class FingerprintService:
             
             # Nếu loop hết mà không return -> Full bộ nhớ
             return None
+    def get_by_device(self, device_id: str, employee_id: int = None):
+        db = SessionLocal()
+        try:
+            # 1. Tạo câu query cơ bản lấy theo device_id
+            query = db.query(Fingerprint).filter(Fingerprint.device_id == device_id)
 
+            # 2. Nếu có employee_id truyền vào thì filter thêm
+            if employee_id is not None:
+                query = query.filter(Fingerprint.employee_id == employee_id)
+
+            # 3. Thực thi và trả về list
+            return query.all()
+        finally:
+            db.close()
+    
 fingerprint_service = FingerprintService()
