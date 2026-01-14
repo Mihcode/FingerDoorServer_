@@ -247,6 +247,7 @@ def get_salary_stats(
         "full_name": employee.full_name,
         "month": month,
         "year": year,
+		"position": employee.position, 
         "valid_work_days": valid_work_days,
         "ot_days": ot_days,
         "month_salary": monthly_salary_base,
