@@ -42,3 +42,27 @@ class AttendanceResponse(BaseModel):
     check_out: Optional[str]
     total_minutes: int
     ot_minutes: int
+
+# Class dùng cho API Update (Web gửi lên)
+class EmployeeUpdate(BaseModel):
+    full_name: str
+    gender: str
+    dob: str          # Web gửi dạng chuỗi "YYYY-MM-DD"
+    position: str     # Chức vụ (phải khớp với bảng Salary)
+    phone_number: str
+    email: str
+    
+class SalaryStatsResponse(BaseModel):
+    emp_code: str
+    full_name: str
+    month: int
+    year: int
+    position: str    
+    # Các con số thống kê
+    valid_work_days: float    # Số ngày công hợp lệ
+    ot_days: float            # Số ngày có OT
+    # Tiền
+    monthly_salary: float     # Lương cứng
+    ot_salary_per_day: float  # Lương OT/ngày
+    total_income: float       # Tổng thu nhập tính đến hiện tại
+    
