@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.services.enroll_context import enroll_context
 from app.services.fingerprint_service import fingerprint_service
 from app.services.device_log_service import device_log_service  # <--- Sử dụng service này
+from app.services.device_service import device_service
 
 logger = logging.getLogger("mqtt")
 logging.basicConfig(level=logging.INFO)
@@ -83,19 +84,25 @@ class MQTTClient:
     # ---------- HANDLERS ----------
 
     def handle_door_event(self, device_id: str, data: dict):
-        state = data.get("state") # "open", "close"
-        ts = data.get("ts") # Timestamp từ device gửi lên (nếu có)
+        # Topic: base/device_id/door
+        # Payload mẫu: {"state":"locked", "event":"door_state", ...}
+        
+        state = data.get("state") # "locked", "open"
+        ts = data.get("ts")
 
         logger.info(f"[DOOR] {device_id} → {state}")
 
-        # [NEW] Ghi log trạng thái cửa vào DB
-        # Ví dụ: state có thể là "unlocked" (mở thành công) hoặc "locked"
+        # [UPDATE] Lưu trạng thái cửa vào DB (update cột door_state trong bảng devices)
+        if state:
+            device_service.update_door_state(device_id, state)
+
+        # [GIỮ NGUYÊN] Ghi log lịch sử (DeviceLog)
         device_log_service.add(
             device_id=device_id,
             event_type="door_event",
             success=True,
             message=f"Door state changed to: {state}",
-            timestamp=ts # Nếu ts null, service tự lấy giờ hiện tại
+            timestamp=ts
         )
 
     def handle_fingerprint_event(self, device_id: str, data: dict):
@@ -200,18 +207,20 @@ class MQTTClient:
             )
 
     def handle_status_event(self, device_id: str, data):
-        # data có thể là chuỗi "online"/"offline" hoặc dict
-        status_val = data if isinstance(data, str) else data.get("status", "unknown")
+        # Topic: base/device_id/status
+        # Payload mẫu: {"status":"online", "ts":"...", "event":"device_status"}
         
+        # Lấy status, nếu data là dict thì lấy key 'status', nếu string thì dùng luôn
+        if isinstance(data, dict):
+            status_val = data.get("status", "unknown")
+        else:
+            status_val = str(data)
+
         logger.info(f"[STATUS] {device_id} → {status_val}")
-        
-        # Tùy chọn: Ghi log khi thiết bị online/offline
-        # device_log_service.add(
-        #     device_id=device_id,
-        #     event_type="status_change",
-        #     message=f"Device is {status_val}",
-        #     success=True
-        # )
+
+        # [UPDATE] Nếu thiết bị báo online -> Cập nhật heartbeat vào DB
+        if status_val == "online":
+            device_service.update_heartbeat(device_id)
 
     def handle_command_debug(self, device_id: str, data: dict):
         logger.debug(f"[CMD-DEBUG] {device_id} ← {data}")

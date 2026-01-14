@@ -8,7 +8,6 @@ from app.models import models      # Đảm bảo import đúng đường dẫn 
 
 router = APIRouter()
 
-# API cũ: Lấy danh sách nhân viên
 @router.get("/", response_model=None)
 def read_employees(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """
@@ -17,8 +16,6 @@ def read_employees(skip: int = 0, limit: int = 100, db: Session = Depends(get_db
     """
     employees = db.query(models.Employee).offset(skip).limit(limit).all()
     return employees
-
-# --- API MỚI THÊM VÀO ---
 
 @router.get("/daily-attendance")
 def read_daily_attendance(

@@ -29,6 +29,13 @@ class DeviceLogResp(BaseModel):
     success: bool
     message: Optional[str]
 
+class DeviceStatusResp(BaseModel):
+    device_id: str
+    status: str       # online/offline
+    door_state: str   # LOCKED/OPEN/WAITING_TO_OPEN
+    last_seen: Optional[datetime]
+
+
 # ==========================================
 # 1. Đăng ký vân tay (Enroll)
 # ==========================================
@@ -154,9 +161,6 @@ def open_door(device_id: str):
         "status": "door_unlock_sent"
     }
 
-# ==========================================
-# Các API Read (Get) giữ nguyên
-# ==========================================
 @router.get(
     "/{device_id}/fingerprints",
     response_model=List[FingerprintResp]
@@ -177,8 +181,14 @@ def get_device_logs(device_id: str, limit: int = 50):
 
 @router.get("/{device_id}/status")
 def get_device_status(device_id: str):
-    status_val = device_service.get_status(device_id)
+    data = device_service.get_full_status(device_id)
+    
+    if not data:
+        raise HTTPException(404, "Device not found")
+    
     return {
-        "device_id": device_id,
-        "status": status_val or "unknown"
+        "device_id": data["device_id"],
+        "status": data["connection_status"], # Trả về "online" hoặc "offline"
+        "door_state": data["door_state"],    # Trả về Enum value
+        "last_seen": data["last_seen"]
     }
