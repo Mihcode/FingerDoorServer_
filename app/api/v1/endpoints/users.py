@@ -324,7 +324,7 @@ def create_new_employee(
         new_user = models.User(
             username=final_username,
             password=hashed_password,
-            role="user", # Mặc định là nhân viên
+            role="employee", # Mặc định là nhân viên
             employee_id=new_emp.id
         )
         db.add(new_user)
