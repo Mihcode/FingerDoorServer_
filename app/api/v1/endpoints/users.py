@@ -250,7 +250,7 @@ def get_salary_stats(
 		"position": employee.position, 
         "valid_work_days": valid_work_days,
         "ot_days": ot_days,
-        "month_salary": monthly_salary_base,
+        "monthly_salary": monthly_salary_base,
         "ot_salary_per_day": ot_salary_unit,
         "total_income": round(total_income, 0) # Làm tròn số tiền
     }
