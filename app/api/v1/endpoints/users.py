@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import extract
 from app.database import get_db
 import app.models.models as models, app.schema.schemas as schemas
-<<<<<<< HEAD
 import random
 import string
 import unidecode  # Cần pip install unidecode để bỏ dấu tiếng Việt
@@ -12,9 +11,6 @@ from fastapi import BackgroundTasks # Để gửi email ngầm không treo web
 from app.core.security import get_password_hash
 from app.utils.email_utils import send_account_email
 from datetime import datetime 
-=======
-import time, datetime          
->>>>>>> 2f5ca17 (add salary)
 
 router = APIRouter()
 
