@@ -3,7 +3,7 @@ import json
 from app.core.config import settings
 
 # 👇👇👇 DÁN CÁI URL BẠN VỪA COPY VÀO GIỮA CẶP NGOẶC KÉP NÀY 👇👇👇
-GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX/exec" 
+GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby61-LVI9AMVzUn1v4SqRorG4rppb2ZGNz3f6b2_9xXJafWwlCcLROSODvxl3QhMhkpeA/exec" 
 
 def send_account_email(to_email: str, full_name: str, username: str, temp_password: str):
     print(f"🚀 Đang gửi request tới Google Script để gửi mail cho {to_email}...")
