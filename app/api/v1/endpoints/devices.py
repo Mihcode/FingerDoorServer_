@@ -45,46 +45,88 @@ class DeviceStatusResp(BaseModel):
 )
 def enroll_fingerprint(
     device_id: str,
-    finger_id: int,
     body: EnrollFingerprintReq
 ):
+    # 1. Kiểm tra thiết bị tồn tại
     if not device_service.exists(device_id):
         raise HTTPException(404, "Device not found")
 
-    # 1. Set Context để chờ MQTT phản hồi
+    # 2. [NEW] Tự động tìm ID trống nhỏ nhất (0-128)
+    next_finger_id = fingerprint_service.get_next_available_id(device_id)
+
+    if next_finger_id is None:
+        raise HTTPException(
+            status_code=400, 
+            detail="Device fingerprint memory is full (Max 128)"
+        )
+
+    # 3. Set Context để chờ MQTT phản hồi (dùng ID vừa tìm được)
     enroll_context.set(
         device_id=device_id,
         employee_id=body.employee_id,
-        finger_id=finger_id
+        finger_id=next_finger_id
     )
 
-    # 2. Gửi lệnh xuống MQTT
+    # 4. Gửi lệnh xuống MQTT với ID tự động
     mqtt_client.send_command(
         device_id=device_id,
         cmd="fp_enroll",
-        finger_id=finger_id
+        finger_id=next_finger_id
     )
 
-    # 3. [NEW] Ghi log: Đã gửi yêu cầu đăng ký
+    # 5. Ghi log
     device_log_service.add(
         device_id=device_id,
         employee_id=body.employee_id,
-        finger_id=finger_id,
-        event_type="enroll_req",   # Đánh dấu đây là request từ server
-        success=1,                 # Request gửi đi thành công (chưa biết device có nhận được ko)
-        message=f"Server sent enroll command for finger {finger_id}",
+        finger_id=next_finger_id,
+        event_type="enroll_req",
+        success=1,
+        message=f"Server auto-assigned finger_id {next_finger_id} and sent command",
         timestamp=datetime.now()
     )
 
     return {
         "device_id": device_id,
         "employee_id": body.employee_id,
-        "finger_id": finger_id,
+        "assigned_finger_id": next_finger_id, # Trả về ID để FE biết
         "status": "waiting_device_response"
     }
 
 # ==========================================
-# 2. Xóa vân tay (Delete)
+# 2. Check trạng thái đăng ký (GET)
+# ==========================================
+
+@router.get("/{device_id}/fingerprints/{finger_id}/enroll-status")
+def check_enroll_status(device_id: str, finger_id: int):
+    """
+    API để Frontend gọi định kỳ (polling) kiểm tra kết quả.
+    """
+    # 1. Tìm log kết quả trong DB
+    log = device_log_service.get_enroll_status(device_id, finger_id)
+
+    # 2. Nếu chưa có log -> Thiết bị chưa gửi phản hồi xong
+    if not log:
+        return {
+            "status": "pending",
+            "message": "Waiting for device..."
+        }
+
+    # 3. Nếu có log -> Trả về kết quả (dựa vào cột success)
+    # Kiểm tra xem log này có cũ quá không? (Optional: ví dụ log từ hôm qua thì ko tính)
+    # Ở đây giả định quy trình làm liền mạch nên lấy log mới nhất là đúng.
+    
+    if log.success == 1:
+        return {
+            "status": "success",
+            "message": "Enrollment completed successfully"
+        }
+    else:
+        return {
+            "status": "failed",
+            "message": log.message or "Device reported failure"
+        }
+# ==========================================
+# 3. Xóa vân tay (Delete)
 # ==========================================
 @router.delete(
     "/{device_id}/fingerprints/{finger_id}",
@@ -131,7 +173,7 @@ def delete_fingerprint(device_id: str, finger_id: int):
     }
 
 # ==========================================
-# 3. Mở cửa từ xa (Open Door)
+# 4. Mở cửa từ xa (Open Door)
 # ==========================================
 @router.post("/{device_id}/door/open")
 def open_door(device_id: str):

@@ -106,88 +106,101 @@ class MQTTClient:
         )
 
     def handle_fingerprint_event(self, device_id: str, data: dict):
-        event = data.get("event")       # match, enroll_done, delete_done, error...
-        finger_id = data.get("finger_id")
+        event = data.get("event")
+        
+        device_finger_id = data.get("finger_id") 
+        
         success = data.get("success", True)
         ts = data.get("ts")
-        message = data.get("msg", "")
+        
+        # Lấy message (ưu tiên payload cho lỗi, msg cho thông báo thường)
+        message = data.get("payload") or data.get("msg", "")
 
         logger.info(
-            f"[FP] {device_id} | event={event} | finger_id={finger_id}"
+            f"[FP] {device_id} | event={event} | finger_id={device_finger_id}"
         )
 
         # ---------------------------------------------------------
         # CASE 1: Chấm công / Quẹt vân tay (Match)
         # ---------------------------------------------------------
         if event == "fp_match":
-            # Nếu success = True nghĩa là vân tay khớp
             if success:
-                # TODO: Logic chấm công (Attendance) ở đây
-                # employee_id = ... (cần tìm từ bảng fingerprint dựa trên device_id + finger_id)
+                # TODO: Logic chấm công
                 pass
             
-            # Ghi log sự kiện quẹt thẻ (kể cả thất bại)
+            # Ghi log (dùng device_finger_id vì lúc match device luôn gửi ID lên)
             device_log_service.add(
                 device_id=device_id,
                 event_type="fp_match",
-                finger_id=finger_id,
-                # employee_id=... (nếu tìm được thì điền vào, ko thì để None)
+                finger_id=device_finger_id,
                 success=success,
                 message=message or ("Finger matched" if success else "Match failed"),
                 timestamp=ts
             )
 
         # ---------------------------------------------------------
-        # CASE 2: Kết quả đăng ký (Enroll Done)
+        # CASE 2 & 2.5: Xử lý phản hồi Enroll (Done hoặc Fail)
         # ---------------------------------------------------------
-        elif event == "fp_enroll_done":
-            employee_id = enroll_context.pop(device_id)
+        elif event in ["fp_enroll_done", "fp_enroll_fail"]:
+            # 1. Lấy context đã lưu từ Server (để biết ngón nào đang được chờ đăng ký)
+            ctx = enroll_context.pop(device_id)
 
-            if employee_id is None:
-                # Trường hợp lỗi: Device báo enroll xong nhưng Server ko chờ
+            # Nếu không tìm thấy context (có thể do server restart hoặc timeout)
+            if not ctx:
                 device_log_service.add(
                     device_id=device_id,
-                    event_type="enroll_resp", # Response
-                    finger_id=finger_id,
+                    event_type="enroll_resp",
+                    finger_id=device_finger_id, 
                     success=False,
-                    message="Received enroll_done but no context found on server",
+                    message=f"Context missing. Device sent {event} but server wasn't waiting.",
                     timestamp=ts
                 )
                 return
 
-            # Nếu thiết bị báo thành công -> Lưu vào DB
-            if success:
+            # 2. Giải nén dữ liệu từ Context
+            saved_employee_id = ctx.get("employee_id")
+            saved_finger_id = ctx.get("finger_id") 
+            
+            # [LOGIC QUAN TRỌNG]:
+            # Nếu device gửi finger_id lên thì dùng, nếu gửi None (do lỗi) thì lấy từ Context
+            final_finger_id = device_finger_id if device_finger_id is not None else saved_finger_id
+
+            # Xử lý Logic
+            if event == "fp_enroll_done" and success:
+                # Thành công -> Lưu vân tay vào bảng fingerprints
                 fingerprint_service.add(
                     device_id=device_id,
-                    employee_id=employee_id,
-                    finger_id=finger_id
+                    employee_id=saved_employee_id,
+                    finger_id=final_finger_id
                 )
-                msg_log = "Enrollment successful on device"
+                msg_log = "Enrollment successful"
+                log_success = True
             else:
-                msg_log = f"Enrollment failed on device: {message}"
+                # Thất bại
+                msg_log = f"Enrollment failed: {message}"
+                log_success = False
 
-            # Ghi log kết quả cuối cùng vào bảng Log
+            # Ghi Log vào DB (để API Polling đọc được kết quả)
             device_log_service.add(
                 device_id=device_id,
                 event_type="enroll_resp",
-                finger_id=finger_id,
-                employee_id=employee_id,
-                success=success,
+                finger_id=final_finger_id,  # <--- Đảm bảo ID này luôn có giá trị
+                employee_id=saved_employee_id,
+                success=log_success,
                 message=msg_log,
                 timestamp=ts
             )
             
-            logger.info(f"[FP][ENROLL DONE] device={device_id} success={success}")
+            logger.info(f"[FP][ENROLL] {device_id} success={log_success} msg={msg_log} id={final_finger_id}")
 
         # ---------------------------------------------------------
         # CASE 3: Kết quả xóa (Delete Done)
         # ---------------------------------------------------------
         elif event == "fp_delete_done":
-            # Device báo về đã xóa xong
             device_log_service.add(
                 device_id=device_id,
                 event_type="delete_resp",
-                finger_id=finger_id,
+                finger_id=device_finger_id,
                 success=success,
                 message=message or "Fingerprint deleted on device",
                 timestamp=ts
@@ -200,12 +213,11 @@ class MQTTClient:
              device_log_service.add(
                 device_id=device_id,
                 event_type="device_error",
-                finger_id=finger_id,
+                finger_id=device_finger_id,
                 success=False,
                 message=message,
                 timestamp=ts
             )
-
     def handle_status_event(self, device_id: str, data):
         # Topic: base/device_id/status
         # Payload mẫu: {"status":"online", "ts":"...", "event":"device_status"}

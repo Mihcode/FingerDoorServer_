@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import List, Optional, Union
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 
 # Import kết nối DB và Model
 from app.database import SessionLocal
@@ -10,6 +11,8 @@ from app.models.models import DeviceLog
 
 class DeviceLogService:
 
+    def get_db(self):
+        return SessionLocal()
     def add(
         self,
         device_id: str,
@@ -78,5 +81,18 @@ class DeviceLogService:
         finally:
             db.close()
 
+    def get_enroll_status(self, device_id: str, finger_id: int):
+        """
+        Tìm log mới nhất liên quan đến việc enroll của finger_id này.
+        Chúng ta tìm event_type là 'enroll_resp' (được ghi bởi mqtt client khi xong).
+        """
+        with self.get_db() as session:
+            log = session.query(DeviceLog).filter(
+                DeviceLog.device_id == device_id,
+                DeviceLog.finger_id == finger_id,
+                DeviceLog.event_type == 'enroll_resp' # Khớp với string trong client.py
+            ).order_by(desc(DeviceLog.created_at)).first()
+
+            return log
 # Khởi tạo instance singleton để dùng ở nơi khác
 device_log_service = DeviceLogService()

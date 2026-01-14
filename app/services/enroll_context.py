@@ -1,36 +1,32 @@
 # app/services/enroll_context.py
-
-_enroll_context = {}
-
+from typing import Dict, Optional, Any
 
 class EnrollContext:
     def __init__(self):
-        self.device_id: str | None = None
-        self.employee_id: str | None = None
-        self.finger_id: int | None = None
+        # Lưu trữ trạng thái theo device_id
+        # Structure: { "device_abc": { "employee_id": 10, "finger_id": 5 } }
+        self._storage: Dict[str, Dict[str, Any]] = {}
 
-    def set(self, device_id: str, employee_id: str, finger_id: int):
-        self.device_id = device_id
-        self.employee_id = employee_id
-        self.finger_id = finger_id
-
-    def clear(self):
-        self.device_id = None
-        self.employee_id = None
-        self.finger_id = None
-
-    def dump(self):
-        return {
-            "device_id": self.device_id,
-            "employee_id": self.employee_id,
-            "finger_id": self.finger_id,
+    def set(self, device_id: str, employee_id: int, finger_id: int):
+        """Lưu context khi bắt đầu gửi lệnh Enroll"""
+        self._storage[device_id] = {
+            "employee_id": employee_id,
+            "finger_id": finger_id
         }
 
+    def pop(self, device_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Lấy ra và xóa luôn context (dùng khi nhận phản hồi xong).
+        Trả về dict { "employee_id": ..., "finger_id": ... } hoặc None.
+        """
+        return self._storage.pop(device_id, None)
 
+    def get(self, device_id: str) -> Optional[Dict[str, Any]]:
+        """Lấy xem thử (không xóa)"""
+        return self._storage.get(device_id)
+
+    def clear(self):
+        self._storage.clear()
 
 # 🔥 SINGLE INSTANCE
-enroll_context = EnrollContext()
-
-
-
 enroll_context = EnrollContext()
