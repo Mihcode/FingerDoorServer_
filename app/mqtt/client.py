@@ -175,18 +175,18 @@ class MQTTClient:
         # ---------------------------------------------------------
         # CASE 2 & 2.5: Xử lý phản hồi Enroll (Done hoặc Fail)
         # ---------------------------------------------------------
-        elif event in ["fp_enroll_done", "fp_enroll_fail"]:
+        elif event in ["fp_enroll_success", "fp_enroll_fail"]:
             # 1. Lấy context để biết ai (employee_id) đang đăng ký
             ctx = enroll_context.pop(device_id)
 
             if not ctx:
-                # Mất context (do restart server hoặc timeout) -> Ghi log lỗi
+                logger.warning(f"[ENROLL] Context missing for {device_id}. Event ignored.")
                 device_log_service.add(
                     device_id=device_id,
                     event_type="enroll_resp",
-                    finger_id=device_finger_id, 
+                    finger_id=device_finger_id if device_finger_id is not None else 0, 
                     success=False,
-                    message=f"Context missing. Device sent {event} but server wasn't waiting.",
+                    message=f"Context missing (Timeout?). Device sent {event}.",
                     timestamp=ts_obj
                 )
                 return
@@ -194,45 +194,56 @@ class MQTTClient:
             saved_employee_id = ctx.get("employee_id")
             saved_finger_id = ctx.get("finger_id") 
             
-            # Ưu tiên lấy ID từ device gửi lên, nếu null thì lấy từ context dự phòng
+            # 2. Xác định ID cuối cùng: Ưu tiên lấy từ Device trả về, nếu không thì lấy từ Context lúc gửi lệnh
             final_finger_id = device_finger_id if device_finger_id is not None else saved_finger_id
 
             msg_log = ""
             log_success = False
 
-            if event == "fp_enroll_done" and success:
-                # === [LOGIC CHÍNH] LƯU VÀO BẢNG FINGERPRINTS ===
-                try:
-                    logger.info(f"[ENROLL] Saving to DB: Dev={device_id}, Emp={saved_employee_id}, Finger={final_finger_id}")
-                    
-                    fingerprint_service.add(
-                        device_id=device_id,
-                        employee_id=saved_employee_id,
-                        finger_id=final_finger_id
-                    )
-                    
-                    msg_log = "Enrollment successful - Data saved to DB"
-                    log_success = True
-                except Exception as e:
-                    logger.error(f"[ENROLL] DB Error: {str(e)}")
-                    msg_log = f"Device enrolled but DB save failed: {str(e)}"
-                    log_success = False # Đánh dấu false để FE biết có lỗi hệ thống
+            # 3. Logic Lưu DB (Chỉ thực hiện khi Device báo thành công)
+            if event == "fp_enroll_success" and success:
+                # Kiểm tra ràng buộc dữ liệu quan trọng
+                if final_finger_id is not None and saved_employee_id is not None:
+                    try:
+                        logger.info(f"[ENROLL] Saving to DB: Dev={device_id}, Emp={saved_employee_id}, Finger={final_finger_id}")
+                        
+                        # [FIX] Ép kiểu int để đảm bảo an toàn khi lưu vào DB
+                        fingerprint_service.add(
+                            device_id=device_id,
+                            employee_id=int(saved_employee_id),
+                            finger_id=int(final_finger_id)
+                        )
+                        
+                        msg_log = f"Enrollment successful. Assigned Finger ID: {final_finger_id}"
+                        log_success = True
+                        
+                    except Exception as e:
+                        # Lỗi này thường do trùng lặp ID (Unique Constraint) hoặc lỗi kết nối DB
+                        logger.error(f"[ENROLL] DB Error: {str(e)}")
+                        msg_log = f"Device enrolled OK but DB Save Failed: {str(e)}"
+                        log_success = False 
+                else:
+                    # Trường hợp hiếm: Device báo thành công nhưng không có ID
+                    msg_log = "Enrollment successful on device but ID is missing/invalid."
+                    log_success = False
             else:
+                # Trường hợp Device báo thất bại
                 msg_log = f"Enrollment failed on device: {message}"
                 log_success = False
 
-            # Ghi Log kết quả cuối cùng
+            # 4. Ghi Log kết quả cuối cùng vào bảng device_logs
             device_log_service.add(
                 device_id=device_id,
                 event_type="enroll_resp",
-                finger_id=final_finger_id,
+                # Nếu final_finger_id là None (trường hợp lỗi nặng), để tạm là 0 hoặc null tuỳ DB
+                finger_id=final_finger_id if final_finger_id is not None else 0,
                 employee_id=saved_employee_id,
                 success=log_success,
                 message=msg_log,
                 timestamp=ts_obj
             )
             
-            logger.info(f"[FP][ENROLL] {device_id} success={log_success} msg={msg_log} id={final_finger_id}")
+            logger.info(f"[FP][ENROLL] {device_id} | Success={log_success} | Msg={msg_log}")
 
         # ---------------------------------------------------------
         # CASE 3: Kết quả xóa (Delete Done)

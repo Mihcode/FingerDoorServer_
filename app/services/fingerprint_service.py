@@ -53,15 +53,31 @@ class FingerprintService:
 
     def add(self, device_id: str, employee_id: int, finger_id: int):
         with self.get_db() as db:
-            new_fp = Fingerprint(
-                device_id=device_id,
-                employee_id=employee_id,
-                finger_id=finger_id
-            )
-            db.add(new_fp)
-            db.commit()
-            db.refresh(new_fp)
-            return new_fp
+            # 1. KIỂM TRA TRƯỚC: Tìm xem cặp (device_id, finger_id) đã tồn tại chưa
+            existing_fp = db.query(Fingerprint).filter(
+                Fingerprint.device_id == device_id,
+                Fingerprint.finger_id == finger_id
+            ).first()
+
+            if existing_fp:
+                # 2. NẾU CÓ RỒI -> CẬP NHẬT (Update)
+                # Tình huống: Ghi đè vân tay cũ hoặc dữ liệu bị lệch
+                existing_fp.employee_id = employee_id
+                # existing_fp.updated_at = datetime.now() # Nếu model có cột này
+                db.commit()
+                db.refresh(existing_fp)
+                return existing_fp
+            else:
+                # 3. NẾU CHƯA CÓ -> THÊM MỚI (Insert)
+                new_fp = Fingerprint(
+                    device_id=device_id,
+                    employee_id=employee_id,
+                    finger_id=finger_id
+                )
+                db.add(new_fp)
+                db.commit()
+                db.refresh(new_fp)
+                return new_fp
 
     def mark_deleted(self, fp_id: int):
         with self.get_db() as db:
