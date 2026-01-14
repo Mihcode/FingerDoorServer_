@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import date
 
@@ -65,4 +65,13 @@ class SalaryStatsResponse(BaseModel):
     monthly_salary: float     # Lương cứng
     ot_salary_per_day: float  # Lương OT/ngày
     total_income: float       # Tổng thu nhập tính đến hiện tại
-    
+
+# Input tạo nhân viên từ Web
+class EmployeeCreate(BaseModel):
+    full_name: str
+    gender: str
+    dob: str          # YYYY-MM-DD
+    position: str     # Phải khớp bảng salary
+    phone_number: str
+    email: EmailStr   # Tự validate định dạng email
+    start_date: str   # YYYY-MM-DD
