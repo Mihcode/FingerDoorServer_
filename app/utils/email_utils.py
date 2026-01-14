@@ -29,8 +29,7 @@ def send_account_email(to_email: str, full_name: str, username: str, temp_passwo
         """
         msg.attach(MIMEText(body, 'html'))
 
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()
+        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
         server.quit()
