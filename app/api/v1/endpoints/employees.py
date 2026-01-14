@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional  # Import thêm Optional
-from datetime import date          # Import thêm date để lọc ngày
+from datetime import date, timedelta, datetime        
 from sqlalchemy import func, case
 from app.database import get_db 
-from app.models import models      # Đảm bảo import đúng đường dẫn models của bạn
+from app.models import models     
+from app.core.config import settings
 import calendar
 from app.models.models import (
     DailyAttendance,
@@ -146,3 +147,73 @@ def preview_payroll(
         "month": month,
         "employees": result
     }
+
+@router.get("/dashboard/stats")
+def get_dashboard_stats(db: Session = Depends(get_db)):
+    """
+    Thống kê 7 ngày gần nhất (tính cả hôm nay lùi về trước):
+    - total_employees: Tổng nhân viên nên đi làm
+    - on_time: Đi làm đúng giờ (trước hoặc đúng WORK_START_TIME)
+    - late: Đi muộn (sau WORK_START_TIME)
+    - absent: Vắng mặt (không có dữ liệu check-in)
+    """
+    
+    # 1. Lấy mốc giờ làm việc từ config (Ví dụ: 09:00:00)
+    work_start_time = settings.get_work_start_time()
+    
+    stats_result = []
+    today = date.today()
+
+    # 2. Lặp qua 7 ngày (từ hôm nay lùi về 6 ngày trước)
+    for i in range(7):
+        current_date = today - timedelta(days=i)
+        
+        # --- A. Lấy tổng số nhân viên ĐANG hoạt động tính đến ngày current_date ---
+        # Logic: Nhân viên phải có start_date <= ngày đang xét mới được tính là "cần đi làm"
+        total_employees = db.query(func.count(models.Employee.id))\
+            .filter(models.Employee.start_date <= current_date)\
+            .scalar()
+        
+        if total_employees is None:
+            total_employees = 0
+
+        # --- B. Lấy danh sách chấm công của ngày đó ---
+        daily_records = db.query(models.DailyAttendance)\
+            .filter(models.DailyAttendance.work_date == current_date)\
+            .all()
+
+        on_time_count = 0
+        late_count = 0
+        
+        # --- C. Phân loại Đi đúng giờ / Đi muộn ---
+        for record in daily_records:
+            if record.check_in:
+                # So sánh thời gian check_in với work_start_time
+                if record.check_in <= work_start_time:
+                    on_time_count += 1
+                else:
+                    late_count += 1
+        
+        # Tổng số người đã đi làm (có check-in)
+        present_count = on_time_count + late_count
+        
+        # --- D. Tính số người vắng ---
+        # Vắng = Tổng nhân viên - (Đúng giờ + Đi muộn)
+        # Lưu ý: Đảm bảo không âm (trường hợp DB lỗi có nhiều record hơn nhân viên)
+        absent_count = max(0, total_employees - present_count)
+
+        # Thêm vào danh sách kết quả
+        stats_result.append({
+            "date": current_date.strftime("%Y-%m-%d"),
+            "total_employees": total_employees,
+            "on_time": on_time_count,
+            "late": late_count,
+            "absent": absent_count,
+            "work_start_time": str(work_start_time) # Trả về để Frontend biết mốc so sánh
+        })
+
+    # Đảo ngược list để ngày cũ nhất lên đầu (cho biểu đồ vẽ từ trái sang phải: Quá khứ -> Hiện tại)
+    # Nếu bạn muốn ngày mới nhất lên đầu thì bỏ dòng này.
+    stats_result.reverse() 
+
+    return stats_result
