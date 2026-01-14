@@ -4,7 +4,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import extract
 from app.database import get_db
 import app.models.models as models, app.schema.schemas as schemas
-from datetime import datetime
+from datetime import datetime, time, date
+import calendar 
+
 
 router = APIRouter()
 
@@ -166,3 +168,88 @@ def update_employee(emp_code: str, emp_in: schemas.EmployeeUpdate, db: Session =
         db.rollback()
         # Lỗi thường gặp: Position không tồn tại trong bảng Salary
         raise HTTPException(status_code=400, detail=f"Lỗi cập nhật (Kiểm tra lại chức vụ có đúng không): {str(e)}")
+
+# Tính thu nhập
+@router.get("/salary-stats", response_model=schemas.SalaryStatsResponse)
+def get_salary_stats(
+    user_id: int, 
+    month: int, 
+    year: int, 
+    db: Session = Depends(get_db)
+):
+    # 1. Lấy thông tin Nhân viên & Bảng lương
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user or not user.employee:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ nhân viên")
+    
+    employee = user.employee
+    salary_info = employee.salary_info
+
+    if not salary_info:
+        raise HTTPException(status_code=400, detail="Nhân viên chưa được xếp hạng lương")
+
+    # 2. Lấy dữ liệu chấm công trong tháng
+    records = db.query(models.DailyAttendance).filter(
+        models.DailyAttendance.employee_id == employee.id,
+        extract('month', models.DailyAttendance.work_date) == month,
+        extract('year', models.DailyAttendance.work_date) == year
+    ).all()
+
+    # 3. --- XỬ LÝ LOGIC NGHIÊM NGẶT ---
+    
+    # Cấu hình giờ giấc (Hardcode theo quy định công ty)
+    TIME_DEADLINE_IN = time(9, 0, 0)    # 09:00:00
+    TIME_DEADLINE_OUT = time(17, 0, 0)  # 17:00:00
+    TIME_OT_START = time(19, 0, 0)      # 19:00:00 (Sau 19h mới tính OT)
+    STANDARD_WORK_DAYS_IN_MONTH = 22    # Quy ước chia lương tháng
+
+    valid_work_days = 0
+    ot_days = 0
+
+    for row in records:
+        # Nếu thiếu check-in hoặc check-out thì coi như bỏ, không tính gì cả
+        if not row.check_in or not row.check_out:
+            continue
+
+        # Lấy thứ trong tuần (0=Thứ 2, ..., 5=Thứ 7, 6=Chủ nhật)
+        weekday = row.work_date.weekday()
+
+        # === LOGIC 1: TÍNH NGÀY CÔNG CHUẨN ===
+        # Điều kiện: 
+        # 1. Không phải T7, CN (weekday < 5)
+        # 2. Check-in <= 09:00
+        # 3. Check-out >= 17:00
+        if weekday < 5: 
+            if row.check_in <= TIME_DEADLINE_IN and row.check_out >= TIME_DEADLINE_OUT:
+                valid_work_days += 1
+            else:
+                # Log chơi để debug (có thể xóa)
+                print(f"Ngày {row.work_date}: Mất công (Vào {row.check_in}, Ra {row.check_out})")
+
+        # === LOGIC 2: TÍNH OT (Độc lập với ngày công) ===
+        # Điều kiện: Check-out >= 19:00
+        # (Kể cả T7, CN hay đi muộn, miễn về sau 19h là tính OT)
+        if row.check_out >= TIME_OT_START:
+            ot_days += 1
+
+    # 4. TÍNH TIỀN
+    monthly_salary_base = float(salary_info.monthly_salary)
+    ot_salary_unit = float(salary_info.bonus_salary)
+    
+    # Lương 1 ngày công chuẩn
+    daily_salary_unit = monthly_salary_base / STANDARD_WORK_DAYS_IN_MONTH
+
+    # Tổng thu nhập = (Ngày công * Lương ngày) + (Ngày OT * Lương OT)
+    total_income = (valid_work_days * daily_salary_unit) + (ot_days * ot_salary_unit)
+
+    return {
+        "emp_code": employee.emp_code,
+        "full_name": employee.full_name,
+        "month": month,
+        "year": year,
+        "valid_work_days": valid_work_days,
+        "ot_days": ot_days,
+        "current_daily_salary": round(daily_salary_unit, 2),
+        "ot_salary_per_day": ot_salary_unit,
+        "total_income": round(total_income, 0) # Làm tròn số tiền
+    }
