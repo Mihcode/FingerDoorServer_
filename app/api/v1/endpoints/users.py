@@ -11,26 +11,49 @@ from fastapi import BackgroundTasks # Để gửi email ngầm không treo web
 from app.core.security import get_password_hash
 from app.utils.email_utils import send_account_email
 from datetime import datetime 
+from app.core.security import verify_password, get_password_hash
 
 router = APIRouter()
 
 # Login
 @router.post("/login", response_model=schemas.UserResponse)
 def login(user_in: schemas.UserLogin, db: Session = Depends(get_db)):
-	user = db.query(models.User).filter(
-		models.User.username == user_in.username,
-		models.User.password == user_in.password
-	).first()
+    # 1. Chỉ tìm theo Username trước (Bỏ đoạn filter password đi)
+    user = db.query(models.User).filter(
+        models.User.username == user_in.username
+    ).first()
 
-	if not user:
-		raise HTTPException(status_code=401, detail="Invalid username or password")
+    # Nếu không tìm thấy user -> Lỗi luôn
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    # 2. KIỂM TRA MẬT KHẨU (HỖN HỢP)
+    is_valid_password = False
     
-	return {
-		"id": user.id,
-		"username": user.username,
-		"role": user.role,
-		"full_name": user.employee.full_name if user.employee else "Unknown"
-	}
+    # CASE A: Check mật khẩu trần (Cho user cũ)
+    if user.password == user_in.password:
+        print(f"⚠️ Phát hiện User {user.username} dùng mật khẩu trần -> Đang tự động mã hóa...")
+        # Tự động nâng cấp bảo mật: Mã hóa và lưu lại
+        user.password = get_password_hash(user_in.password)
+        db.commit() # Lưu vào DB
+        is_valid_password = True
+        
+    # CASE B: Check mật khẩu mã hóa (Cho user mới hoặc user đã nâng cấp)
+    # verify_password đã được định nghĩa trong app/core/security.py
+    elif verify_password(user_in.password, user.password):
+        is_valid_password = True
+
+    # 3. Nếu sai cả 2 trường hợp -> Lỗi
+    if not is_valid_password:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    # 4. Trả về thông tin
+    return {
+        "id": user.id,
+        "username": user.username,
+        "role": user.role,
+        "full_name": user.employee.full_name if user.employee else "Unknown"
+    }
 
 # Profile nhân viên
 @router.get("/profile/{user_id}", response_model=schemas.ProfileResponse)
