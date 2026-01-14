@@ -4,6 +4,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import extract
 from app.database import get_db
 import app.models.models as models, app.schema.schemas as schemas
+import random
+import string
+import unidecode  # Cần pip install unidecode để bỏ dấu tiếng Việt
+from fastapi import BackgroundTasks # Để gửi email ngầm không treo web
+from app.core.security import get_password_hash
+from app.utils.email_utils import send_account_email
 
 router = APIRouter()
 
@@ -250,3 +256,102 @@ def get_salary_stats(
         "ot_salary_per_day": ot_salary_unit,
         "total_income": round(total_income, 0) # Làm tròn số tiền
     }
+	# Thêm nhân viên - đăng ký
+# Tạo Username từ tên (Nguyen Van Minh -> minhnv)
+def generate_base_username(full_name: str) -> str:
+    # Bỏ dấu tiếng Việt (Nguyễn Văn Minh -> Nguyen Van Minh)
+    text = unidecode.unidecode(full_name).lower()
+    parts = text.split()
+    if not parts:
+        return "user"
+    
+    # Logic: Tên + Chữ cái đầu Họ + Chữ cái đầu Đệm
+    # Ví dụ: parts = ['nguyen', 'van', 'minh']
+    # last_name = 'minh'
+    # initials = 'n' + 'v' => 'nv'
+    # result = 'minhnv'
+    last_name = parts[-1]
+    initials = "".join([p[0] for p in parts[:-1]])
+    return f"{last_name}{initials}"
+# Hàm phụ trợ: Tạo mật khẩu ngẫu nhiên 8 ký tự
+def generate_temp_password(length=8):
+    chars = string.ascii_letters + string.digits
+    return ''.join(random.choice(chars) for _ in range(length))
+
+# API
+@router.post("/employees/create", status_code=201)
+def create_new_employee(
+    emp_in: schemas.EmployeeCreate, 
+    background_tasks: BackgroundTasks, # Dùng cái này để gửi mail chạy ngầm
+    db: Session = Depends(get_db)
+):
+    # 1. Kiểm tra Email đã tồn tại chưa
+    if db.query(models.Employee).filter(models.Employee.email == emp_in.email).first():
+        raise HTTPException(status_code=400, detail="Email này đã được sử dụng!")
+
+    try:
+        # 2. Tạo bản ghi Employee
+        new_emp = models.Employee(
+            emp_code="TEMP", # Tạm thời để TEMP, tí update ID vào hoặc logic sinh mã riêng
+            full_name=emp_in.full_name,
+            gender=emp_in.gender,
+            dob=datetime.strptime(emp_in.dob, "%Y-%m-%d").date(),
+            position=emp_in.position,
+            phone_number=emp_in.phone_number,
+            email=emp_in.email,
+            start_date=datetime.strptime(emp_in.start_date, "%Y-%m-%d").date()
+        )
+        db.add(new_emp)
+        db.flush() # Flush để lấy new_emp.id ngay lập tức (chưa commit hẳn)
+
+        # Update lại Mã nhân viên cho đẹp (VD: NV + ID: NV005)
+        new_emp.emp_code = f"NV{new_emp.id:03d}" # NV001, NV002...
+        
+        # 3. Tạo Username tự động & Kiểm tra trùng
+        base_username = generate_base_username(emp_in.full_name)
+        final_username = base_username
+        counter = 1
+        
+        while db.query(models.User).filter(models.User.username == final_username).first():
+            final_username = f"{base_username}{counter}"
+            counter += 1
+        
+        # 4. Tạo Mật khẩu ngẫu nhiên
+        temp_password = generate_temp_password()
+        hashed_password = get_password_hash(temp_password)
+
+        # 5. Tạo User (Tài khoản)
+        new_user = models.User(
+            username=final_username,
+            password=hashed_password,
+            role="user", # Mặc định là nhân viên
+            employee_id=new_emp.id
+        )
+        db.add(new_user)
+        
+        # 6. Commit toàn bộ vào DB
+        db.commit()
+
+        # 7. Gửi Email (Chạy ngầm - Background Task)
+        background_tasks.add_task(
+            send_account_email, 
+            to_email=emp_in.email, 
+            full_name=emp_in.full_name, 
+            username=final_username, 
+            temp_password=temp_password
+        )
+
+        return {
+            "status": "success",
+            "message": "Đã tạo nhân viên và gửi email cấp tài khoản.",
+            "data": {
+                "emp_code": new_emp.emp_code,
+                "username": final_username,
+                "full_name": new_emp.full_name
+            }
+        }
+
+    except Exception as e:
+        db.rollback()
+        print(f"Lỗi tạo nhân viên: {e}")
+        raise HTTPException(status_code=500, detail="Lỗi Server khi tạo nhân viên")
