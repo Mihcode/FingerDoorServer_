@@ -1,6 +1,7 @@
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from app.core.config import settings
 
 # Cấu hình Email (Lấy từ biến môi trường, AN TOÀN TUYỆT ĐỐI)
 SMTP_SERVER = "FingerDoorServer.gmail.com"
