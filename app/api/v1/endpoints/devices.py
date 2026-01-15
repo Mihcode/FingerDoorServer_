@@ -130,7 +130,7 @@ def check_enroll_status(device_id: str, finger_id: int):
                 "status": "failed",
                 "message": "Device timeout (No response after 60s)"
             }
-
+        #Nút vàng
         return {
             "status": "pending",
             "message": "Command sent to device, waiting for fingerprint..."
@@ -138,6 +138,7 @@ def check_enroll_status(device_id: str, finger_id: int):
 
     # === TRƯỜNG HỢP B: ĐÃ CÓ KẾT QUẢ (Completed) ===
     # Log mới nhất là 'enroll_resp'
+    #Nút xanh lá cây
     elif log.event_type == "enroll_resp":
         if log.success == 1: # Hoặc True tuỳ setup DB
             return {
@@ -145,6 +146,7 @@ def check_enroll_status(device_id: str, finger_id: int):
                 "message": "Enrollment completed successfully"
             }
         else:
+            #nút đỏ như cũ
             return {
                 "status": "failed",
                 "message": log.message or "Device reported failure"

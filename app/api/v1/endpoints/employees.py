@@ -14,7 +14,7 @@ from app.models.models import (
 )
 router = APIRouter()
 STANDARD_DAILY_MINUTES = 480
-STANDARD_WORKING_DAYS = 30
+STANDARD_WORKING_DAYS = 22
 
 @router.get("/", response_model=None)
 def read_employees(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
